@@ -402,3 +402,93 @@ class FlatIndex(BaseIndex):
         def __len__(self):
             return len(self.vectors)
 ```
+
+how about we make the similarity computation independent such that any index can use it?
+wrapping around a class should be easy, its just copy pasting the the code of those functions inside the class
+
+```py
+class SimilarityMetric:
+
+    @staticmethod
+    def dot(v1, v2):
+        result = 0
+        for i in range(len(v1)):
+            result += v1[i] * v2[i]
+        return result
+
+    @staticmethod
+    def normalize(vector):
+        mag_sq = 0
+        for v in vector:
+            mag_sq += v * v
+        mag = mag_sq**0.5
+        if mag == 0:
+            return vector
+        return [v / mag for v in vector]
+
+    @staticmethod
+    def score(metric, query, vector):
+        if metric == "dot":
+            return SimilarityMetric.dot(query, vector)
+
+        elif metric == "cosine":
+            return SimilarityMetric.dot(query, vector)
+
+        elif metric == "l2":
+            dist_sq = 0
+            for i in range(len(query)):
+                diff = query[i] - vector[i]
+                dist_sq += diff * diff
+            return -dist_sq
+
+        else:
+            raise ValueError(f"Unknown metric: {metric}")
+```
+
+add now time to update our FlatIndex class with this!
+
+it is just replacing orphan functions like 
+
+```py
+v = normalize(vector)
+```
+
+with
+
+```py
+v = SimilarityMetric.normalize(vector)
+```
+
+now it's quite obvious that we will go with the factory design principle, it will help us avoid instantiating indexes directly
+
+```py
+class Engine:
+    def create_index(dim, metric="cosine", index_type="flat"):
+        if index_type == "flat":
+            return FlatIndex(dim, metric)
+        else:
+            raise ValueError(f"Unknown index type: {index_type}")
+```
+
+that should allow us to plug more indexes easily.
+
+now we can just do things like this:
+
+```py
+from src.engine import Engine
+
+engine = Engine.create_index(dim=3, metric="l2", index_type="flat")
+
+engine.add_batch(
+    ["a", "b", "c"],
+    [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [1.1, 1.1, 1.1]],
+)
+
+query = [0.8, 0.6, 0]
+
+results = engine.search(query, k=2)
+
+for id_val, score_val in results:
+    print(f"id: {id_val}, score: {score_val}")
+```
+
