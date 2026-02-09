@@ -356,51 +356,51 @@ class FlatIndex(BaseIndex):
         self.ids = []
         self.ids_to_index = {}
 
-        def add(self, id, vector):
-            v = vector
-            if self.metric == "cosine":
-                v = normalize(vector)
+    def add(self, id, vector):
+        v = vector
+        if self.metric == "cosine":
+            v = SimilarityMetric.normalize(vector)
 
-            pos = len(self.vectors)
-            self.vectors.append(v)
-            self.ids.append(id)
-            self.ids_to_index[id] = pos
+        pos = len(self.vectors)
+        self.vectors.append(v)
+        self.ids.append(id)
+        self.ids_to_index[id] = pos
 
-        def search(self, query_vector, k):
-            q = query_vector
-            if self.metric == "cosine":
-                q = normalize(query_vector)
+    def search(self, query_vector, k):
+        q = query_vector
+        if self.metric == "cosine":
+            q = SimilarityMetric.normalize(query_vector)
 
-            heap = []
-            for pos in range(len(self.vectors)):
-                id = self.ids[pos]
-                s = score(self.metric, q, self.vectors[pos])
-                if len(heap) < k:
-                    heapq.heappush(heap, (s, id))
-                else:
-                    heapq.heappushpop(heap, (s, id))
+        heap = []
+        for pos in range(len(self.vectors)):
+            id = self.ids[pos]
+            s = SimilarityMetric.score(self.metric, q, self.vectors[pos])
+            if len(heap) < k:
+                heapq.heappush(heap, (s, id))
+            else:
+                heapq.heappushpop(heap, (s, id))
 
-            return [(id, s) for s, id in sorted(heap, reverse=True)]
+        return [(id, s) for s, id in sorted(heap, reverse=True)]
 
-        def delete(self, id):
-            if id not in self.ids_to_index:
-                return
+    def delete(self, id):
+        if id not in self.ids_to_index:
+            return
 
-            pos = self.ids_to_index[id]
-            last_pos = len(self.vectors) - 1
+        pos = self.ids_to_index[id]
+        last_pos = len(self.vectors) - 1
 
-            if pos != last_pos:
-                self.vectors[pos] = self.vectors[last_pos]
-                self.ids[pos] = self.ids[last_pos]
-                self.ids_to_index[self.ids[pos]] = pos
+        if pos != last_pos:
+            self.vectors[pos] = self.vectors[last_pos]
+            self.ids[pos] = self.ids[last_pos]
+            self.ids_to_index[self.ids[pos]] = pos
 
-            self.vectors.pop()
-            self.ids.pop()
-            del self.ids_to_index[id]
-            return True
+        self.vectors.pop()
+        self.ids.pop()
+        del self.ids_to_index[id]
+        return True
 
-        def __len__(self):
-            return len(self.vectors)
+    def __len__(self):
+        return len(self.vectors)
 ```
 
 how about we make the similarity computation independent such that any index can use it?
@@ -492,3 +492,24 @@ for id_val, score_val in results:
     print(f"id: {id_val}, score: {score_val}")
 ```
 
+now this structure, we would be easily able to add a new index
+
+say we wish to implement IVF, we would just need to inherit a class from BaseIndex and implement add(), search(), delete(), __len__(), and then add to the factory function
+
+that that would be it!
+
+
+but with all these, flat index is just "exhaustive" 
+to find the best match, it must look at every single vector in the database
+
+as we saw in our benchmarks, once we hit millions of vectors the search jumps from milliseconds to seconds 
+and that is really bad 
+
+so how do big players like pinecone, milvus and faiss handle billions of vectors with sub millisecond latency? well duh, they stop looking at everything
+
+
+in part 2, we will take a look at approximate nearest neighbours (ann) and how we might implement IVF, where w ewill use K-means clustering to partition our vector space into 'neigbourhoods'
+
+by only searching neighbourhoods closest to our query, we can achieve massive speedups while maintaining good enough accuracy 
+
+until then, try playing with flatindex and see hwo many vectors your machine can handle before it starts to cry :)
