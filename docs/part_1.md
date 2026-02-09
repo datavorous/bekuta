@@ -88,3 +88,25 @@ def score(metric, query, vector):
     else:
         raise ValueError(f"Unknown metric: {metric}")
 ```
+
+let's implement the most basic search (brute force)
+
+our aim is to find the k most similar vectors to a given query
+
+what we may do is, compare the query to every vector, and keep track of the best k results. hence lets use a simple list to track top-k, and then sort at the end
+
+```py
+def search(index, query_vector, k):
+    q = query_vector
+    if index.metric == "cosine":
+        q = normalize(query_vector)
+
+    results = []
+    for pos in range(len(index.vectors)):
+        id = index.ids[pos]
+        s = score(index.metric, q, index.vectors[pos])
+        results.append((id, s))
+
+    results.sort(key=lambda x: x[1], reverse=True)
+    return results[:k]
+```
