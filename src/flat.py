@@ -35,3 +35,21 @@ def search(index, query_vector, k):
 
     results.sort(key=lambda x: x[1], reverse=True)
     return results[:k]
+
+def heap_search(index, query_vector, k):
+    import heapq
+
+    q = query_vector
+    if index.metric == "cosine":
+        q = normalize(query_vector)
+
+    heap = []
+    for pos in range(len(index.vectors)):
+        id = index.ids[pos]
+        s = score(index.metric, q, index.vectors[pos])
+        if len(heap) < k:
+            heapq.heappush(heap, (s, id))
+        else:
+            heapq.heappushpop(heap, (s, id))
+
+    return [(id, s) for s, id in sorted(heap, reverse=True)]
