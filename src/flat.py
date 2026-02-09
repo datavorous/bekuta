@@ -5,7 +5,7 @@ from .kernels import score
 class FlatIndex:
     def __init__(self, dim, metric="cosine"):
         self.dim = dim
-        self.metric = metric 
+        self.metric = metric
         self.vectors = []
         self.ids = []
         self.ids_to_index = {}
@@ -20,6 +20,7 @@ def add(index, id, vector):
     index.vectors.append(v)
     index.ids.append(id)
     index.ids_to_index[id] = pos
+
 
 def search(index, query_vector, k):
     q = query_vector
