@@ -50,3 +50,41 @@ def add(index, id, vector):
     index.ids.append(id)
     index.ids_to_index[id] = pos
 ```
+
+now we need to implement, i.e. computing the similarity scores
+
+there are different ways to measure how similar two vectors are. we could use 
+
+dot products: sum of element wise prod (higher is more similar)
+
+cosine similarity: dot product of normalized vectors
+
+l2 dist: euclidean distance (lower is more similar, but we will negate it)
+
+```py
+def dot(v1, v2):
+    result = 0
+    for i in range(len(v1)):
+        result += v1[i] * v2[i]
+    return result
+
+def score(metric, query, vector):
+
+    if metric == "dot":
+        return dot(query, vector)
+    
+    elif metric == "cosine":
+        # we are making an assumption that the vectors are already normalized so we can just do a dot product
+        return dot(query, vector)
+    
+    elif metric == "l2":
+        # neg squared l2 distance because we want higher scores to be better
+        dist_sq = 0
+        for i in range(len(query)):
+            diff = query[i] - vector[i]
+            dist_sq += diff * diff
+        return -dist_sq
+    
+    else:
+        raise ValueError(f"Unknown metric: {metric}")
+```
