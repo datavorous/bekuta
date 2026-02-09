@@ -3,6 +3,17 @@ revision = 3
 requires-python = ">=3.12"
 
 [[package]]
+name = "bekuta"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "black" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "black", specifier = ">=26.1.0" }]
+
+[[package]]
 name = "black"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -119,14 +130,3 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/39/2a/cbbf9250020a4a8dd53ba83a46c097b69e5eb49dd14e708f496f548c6612/pytokens-0.4.1-cp314-cp314t-win_amd64.whl", hash = "sha256:584c80c24b078eec1e227079d56dc22ff755e0ba8654d8383b2c549107528918", size = 116287, upload-time = "2026-01-30T01:03:30.912Z" },
     { url = "https://files.pythonhosted.org/packages/c6/78/397db326746f0a342855b81216ae1f0a32965deccfd7c830a2dbc66d2483/pytokens-0.4.1-py3-none-any.whl", hash = "sha256:26cef14744a8385f35d0e095dc8b3a7583f6c953c2e3d269c7f82484bf5ad2de", size = 13729, upload-time = "2026-01-30T01:03:45.029Z" },
 ]
-
-[[package]]
-name = "tinyvector"
-version = "0.1.0"
-source = { virtual = "." }
-dependencies = [
-    { name = "black" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "black", specifier = ">=26.1.0" }]

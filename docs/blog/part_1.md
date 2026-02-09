@@ -1,14 +1,16 @@
-## building a vector search lib from scratch
+# Building a Vector Search Library from Scratch
 
-we first need to understand what we actually need, and then figure out how it is generally implemented elsewhere, and how we might convert our understanding into code accordingly.
+Imagine that we are building a recommendation system. We have got 10M product descriptions, and a user just typed "running shoes for wide feet". How do you find the most relevant product in milliseconds?
 
-our aim is to find a way to store vectors (list of numbers) and then find the most similar ones to a given query vector.
+This is where vector search comes in! Search queries, images, text etc. can all be represented as vectors (list of numbers). The challenge is simple: finding the most similar vectors as quickly as possible, when you have millions of them.
 
-for cases like this, the most common metrics would be to use cosine similarity (for direction), or L2 distance (for absolute distance) to compare vectors.
+Let's build a toy vector search library from the ground up and discover why companies like Pinecone, Milvus, and FAISS need sophisticated techniques to handle billions of vectors.
 
-as we are just starting out, we will just compare the vectors one by one.
+## Starting Simple
 
-let us create a simple container first to hold our data.
+The most straightforward way to find similar vectors is to compare them all. We need somewhere to store our vectors and a way to search through them.
+
+So, let's define a container:
 
 ```py
 class FlatIndex:
@@ -20,9 +22,15 @@ class FlatIndex:
         self.ids_to_index = {}
 ```
 
-`vectors` stores all our data points, `ids` lets us label each vector, and `ids_to_index` will help us to find vectors quickly by id.
+The `vectors` list stores our data points, `ids` lets us label each vector, and `ids_to_index` helps us find vectors quickly by their ID.
 
-now as we know, a_vec dot b_vec = |a||b|cos theta, and to make it convenient for us to compare the cosine similarity, we could just normalize the vectors; essentially dividing each component of the vector using its magnitude.
+### Understanding Similarity
+
+Two vectors can be similar in different ways. Think of movie preferences between you and your friend. Both of you sci-fi (same direction), even if they've watched wayyy more movies (different magnitude). This is what cosine similarity will help us capture i.e. the angle between vectors regardless of what their length might be.
+
+Mathematically we measure this using `a_vec (dot) b_vec = |a||b| cos theta`.
+
+To make comparisons easier, we normalize vectors. After normalization, the dot product directly gives us the cosine similarity.
 
 ```py
 def normalize(vector):
@@ -35,7 +43,7 @@ def normalize(vector):
     return [v / mag for v in vector]
 ```
 
-now with these done, we should move to implement something to add vectors to the index.
+Now we can add vectors to our index. For cosine similarity, we normalize during insertion so we do not have to do it repeatedly at query time:
 
 ```py
 def add(index, id, vector):
@@ -51,15 +59,12 @@ def add(index, id, vector):
     index.ids_to_index[id] = pos
 ```
 
-now we need to implement, i.e. computing the similarity scores
+### The Common Metrics
 
-there are different ways to measure how similar two vectors are. we could use 
+Different use cases need different similarity measures:
 
-dot products: sum of element wise prod (higher is more similar)
-
-cosine similarity: dot product of normalized vectors
-
-l2 dist: euclidean distance (lower is more similar, but we will negate it)
+1. Cosine Similarity: dot product of normalized vectors (measures directional alignment)
+2. L2 Distance: euclidean distance (lower means more similar, so we negate it)
 
 ```py
 def dot(v1, v2):
@@ -89,11 +94,9 @@ def score(metric, query, vector):
         raise ValueError(f"Unknown metric: {metric}")
 ```
 
-let's implement the most basic search (brute force)
+### Our First Search Implementation
 
-our aim is to find the k most similar vectors to a given query
-
-what we may do is, compare the query to every vector, and keep track of the best k results. hence lets use a simple list to track top-k, and then sort at the end
+Our search strategy is quite straightforward. We will just compare the query against every vector, track the scores, and return the top-k results.
 
 ```py
 def search(index, query_vector, k):
@@ -111,7 +114,7 @@ def search(index, query_vector, k):
     return results[:k]
 ```
 
-let's us try to check if our minimal implementation works or not.
+Let's test this with three vectors where we can predict the outcome:
 
 ```py
 from src.flat import FlatIndex, add, search
@@ -131,35 +134,34 @@ for id_val, score_val in results:
     print(f"id: {id_val}, score: {score_val}")
 ```
 
-the output we get:
+The output matches our intuition:
 
 ```bash
 id: vec3, score: 0.9899494936611666
 id: vec1, score: 0.8
 ```
 
-it took 0.015ms for the search operation to take place
+Search took 0.015ms, with three vectors. Hmm, that's fair I guess?
 
-notice, that we are sorting all results even when we only need top-k, 
+### Finding the Breaking Point
 
-can there be any data structure which would help us keep the smallest item at the top and can allow to efficiently add/remove items? 
+How far can we push this simple approach? Let's scale up and watch what happens:
 
-that sounds like a job for binary heap.
+1. 10 vectors: 0.020ms, still instant  
+2. 1000 vectors: 0.867ms, barely noticeable
+3. 10,000 vectors: 8.077ms, getting slower OwO
+4. 100,000 vectors: 72.808ms, now we are feeling it 
+5. 10,000,000 vectors: 9256.012ms, lol.
 
-essentiallly it is a tree, where parent is always smaller than the children.
+Over 9 seconds for a single search, this won't work out well.
 
-we store items in a list, where index 0 is the root (minimum)
-now for any item at index i, we would 
+### Smarter Top-K Tracking
 
-get the left child at index `2*i + 1`, and right at `2*i + 2`, and parent would be in `((i-1)//2)`
+If you look closely, you'll notice something wasteful in our search. We sort all N items even though we only need the top-K results. When we have 10M vectors and only need the best 2, sorting everything is a huge overkill.
 
-while adding, we put that value at the end, then "bubble up" by swapping with parent if smaller.
+In this particular case, we can use a binary heap. Essentially, a heap is a tree where the parent is always smaller than it's children. For any index `i`, the left child sits at `2*i + 1`, the right child at `2*i + 2`, and the parent at `(i-1)//2`. 
 
-and when removing we take the root, move the last item to root, then "bubble down" with smallest child 
-
-let's implement it using python's `heapq`.
-
-we will make another function for now, to help us in benchmarking
+When we maintain a heap of size k, we get O(N log k) complexity instead of O(N log N) from sorting. So when k << N, the difference gets massive.
 
 ```py
 def heap_search(index, query_vector, k):
@@ -181,81 +183,33 @@ def heap_search(index, query_vector, k):
     return [(id, s) for s, id in sorted(heap, reverse=True)]
 ```
 
-on testing our previous example, we find that the time is much higher than naive implemention 
-
-```bash
-Search took 0.015ms
-Heap search took 0.379ms
-id: vec3, score: 0.9899494936611666
-id: vec1, score: 0.8
-```
-
-this is because we are using just 3 vectors, and the overhead is not being amortized
-
-let's spin up lots of vectors and see if we get any perf boost as the number of vectors grows or not.
+Let's spin up lots of vectors and see if we get any perf boost as the number of vectors grows:
 
 ```py
 for i in range(10):
     add(index, f"vec{i}", [i % 10, (i // 10) % 10, (i // 100) % 10])
 ```
 
-with 10:
-Search took 0.020ms
-Heap search took 0.323ms
-id: vec1, score: 0.8
-id: vec2, score: 0.8
+1. 1000 vectors: 1.269ms, the overhead hurts us here.
+2. 10,000 vectors: 8.521ms, getting slower to our previous method
+3. 100,000 vectors: 67.337ms, heap wins!
+4. 10,000,000 vectors: 4532.593ms, nearly 2 times faster!
 
-nope
+Nice.
 
-1000:
-Search took 0.867ms
-Heap search took 1.269ms
-id: vec34, score: 1.0
-id: vec68, score: 1.0
+### Some Nice-To-Have-s
 
-still no...
+Adding batch operations, deletions would be cool.
 
-10,000
-
-Search took 8.077ms
-Heap search took 8.521ms
-id: vec34, score: 1.0
-id: vec68, score: 1.0
-
-we are getting close..
-
-100,000:
-
-Search took 72.808ms
-Heap search took 67.337ms
-id: vec34, score: 1.0
-id: vec68, score: 1.0
-
-ah here we go!
-
-10,000,000?
-
-Search took 9256.012ms
-Heap search took 4532.593ms
-id: vec34, score: 1.0
-id: vec68, score: 1.0
-
-damn
-
-instead of sorting N items O(N log N), we maintain a heap of size k O(N log K), which is much faster when k << N
-
-what can we do next to make this a usable artifact?
-
-uh maybe adding a function to delete vectors, and having batch implementation?
-
-batch insertion is easy tbf:
+A naive batch insertion is straightforward:
 
 ```py
 def add_batch(index, ids, vectors):
     for id, vector in zip(ids, vectors):
         add(index, id, vector)
 ```
-and we got that working like that
+
+and we would be able to use it like this:
 
 ```py
 add_batch(index, ["a", "b", "c"], [
@@ -264,7 +218,8 @@ add_batch(index, ["a", "b", "c"], [
     [1.1, 1.1, 1.1]
 ])
 ```
-let's implement the deleting part
+
+Deletion requires swapping the target with the last element to maintain contiguous arrays, and we can implement that like this:
 
 ```py
 def delete(index, id):
@@ -284,6 +239,8 @@ def delete(index, id):
     del index.ids_to_index[id]
 ```
 
+It should work.
+
 ```py
 print("Before deletion:")
 for id_val, vector in zip(index.ids, index.vectors):
@@ -297,7 +254,7 @@ for id_val, vector in zip(index.ids, index.vectors):
     print(f"id: {id_val}, vector: {vector}")
 ```
 
-output:
+And it does!
 
 ```
 Before deletion:
@@ -309,19 +266,13 @@ id: a, vector: [1.0, 1.0, 1.0]
 id: c, vector: [1.1, 1.1, 1.1]
 ```
 
-well this looks usable as a toy 
+## Refactoring for Extensibility
 
-can we restructure it in any better way?
+Our code is tightly coupled to FlatIndex. Adding new index types like HNSW, IVF or LSH would require rewriting everything.
 
-right now our code is tightly coupled to FlatIndex, if we wanted to add new index types (like HNSW, IVF or LSH), we would have to rewrite a lot of code, so we need to refactor to make adding new indexes easier
+We need a common interface that all index types can follow. This way, the rest of the code doesn't need to know which specific index implementation is running underneath.
 
-we would need a common interface that all index types follow, so the rest of our code dont care doesnt care which index is being used
-
-we might use an abstract class or protocol to define the interface, then go on to implement concrete index types
-
-so let's create a base class that defines what methods every index must have, then refact FlatIndex to inherit from it
-
-something like this should work for us:
+Let's define a base class with the core operations every index must support:
 
 ```py
 class BaseIndex:
@@ -346,7 +297,7 @@ class BaseIndex:
         raise NotImplementedError
 ```
 
-let's wrap around our FlatIndex around this
+Let's wrap around our FlatIndex class around this.
 
 ```py
 class FlatIndex(BaseIndex):
@@ -403,8 +354,8 @@ class FlatIndex(BaseIndex):
         return len(self.vectors)
 ```
 
-how about we make the similarity computation independent such that any index can use it?
-wrapping around a class should be easy, its just copy pasting the the code of those functions inside the class
+How about we make the similarity computation independent such that any index can use it?
+Wrapping around a class should be easy, it would be just copy pasting the the code of those functions inside the class.
 
 ```py
 class SimilarityMetric:
@@ -445,34 +396,26 @@ class SimilarityMetric:
             raise ValueError(f"Unknown metric: {metric}")
 ```
 
-add now time to update our FlatIndex class with this!
+And now it's time to update our FlatIndex class with this!
 
-it is just replacing orphan functions like 
+We will just replace orphan functions like `v = normalize(vector)` with `v = SimilarityMetric.normalize(vector)`.
 
-```py
-v = normalize(vector)
-```
+Now it's quite obvious that we will go with the factory design pattern, it will help us avoid instantiating indexes directly.
 
-with
+### The Factory Pattern
 
-```py
-v = SimilarityMetric.normalize(vector)
-```
-
-now it's quite obvious that we will go with the factory design principle, it will help us avoid instantiating indexes directly
+The factory function prevents us from instantiating indexes directly and makes adding new types trivial.
 
 ```py
 class Engine:
+    @staticmethod
     def create_index(dim, metric="cosine", index_type="flat"):
         if index_type == "flat":
             return FlatIndex(dim, metric)
-        else:
-            raise ValueError(f"Unknown index type: {index_type}")
+        raise ValueError(f"Unknown index type: {index_type}")
 ```
 
-that should allow us to plug more indexes easily.
-
-now we can just do things like this:
+Now our usgae is clean and flexible.
 
 ```py
 from src.engine import Engine
@@ -492,24 +435,30 @@ for id_val, score_val in results:
     print(f"id: {id_val}, score: {score_val}")
 ```
 
-now this structure, we would be easily able to add a new index
+Say we wish to implement IVF, we would just need to inherit a class from `BaseIndex` and implement `add()`, `search()`, `delete()`, `__len__()`, and then add to the factory function. That's it!
 
-say we wish to implement IVF, we would just need to inherit a class from BaseIndex and implement add(), search(), delete(), __len__(), and then add to the factory function
+## The Fundamental Problem
 
-that that would be it!
+Our `FlatIndex` is exhaustive. To find the best match, it must examine every single vector in the database.
 
+As we saw in our benchmarks, once we hit millions of vectors, the search jumps from milliseconds to seconds, and that is really bad.
 
-but with all these, flat index is just "exhaustive" 
-to find the best match, it must look at every single vector in the database
+So how do big players like pinecone, milvus and faiss handle billions of vectors with sub millisecond latency? Well, they stop looking at everything.
 
-as we saw in our benchmarks, once we hit millions of vectors the search jumps from milliseconds to seconds 
-and that is really bad 
+## What's Next
 
-so how do big players like pinecone, milvus and faiss handle billions of vectors with sub millisecond latency? well duh, they stop looking at everything
+In Part 2, we will explore Approximate Nearest Neighbours (ANN) and implement Inverted File Index (IVF). Instead of comparing against every vector, we will use k-means clustering to partition our vector space into neighbourhoods. By only searching the neighbourhoods closest to our query, we can achieve massive speedups while maintaining good accuracy.
 
+Until then, try pushing FlatIndex to its limits, and see how many vectors your machine can handle before it starts to cry :)
 
-in part 2, we will take a look at approximate nearest neighbours (ann) and how we might implement IVF, where w ewill use K-means clustering to partition our vector space into 'neigbourhoods'
+---
 
-by only searching neighbourhoods closest to our query, we can achieve massive speedups while maintaining good enough accuracy 
+Note: I have packaged this as a proper Python library. You git clone my repo, follow the installation instructions and then import it anywhere:
 
-until then, try playing with flatindex and see hwo many vectors your machine can handle before it starts to cry :)
+```py
+from bekuta import Engine
+```
+
+I also added a profiling utility that works as a decorator, just place it above any function you want to benchmark. 
+
+Setting up the project structure is mechanical work that any AI coding assistant can help with, so I will skip those details here.
