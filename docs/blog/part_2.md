@@ -149,3 +149,37 @@ def _compute_mean(self, vectors):
 
 This is pretty straightforward as well.
 
+## Adding Vectors to Clusters
+
+Now that we can train the index, let's implement `add()`.
+
+```py
+def add(self, id, vector):
+    if not self.is_trained:
+        raise ValueError("CAN NOT ADD VECTORS BEFORE BEING TRAINED")
+
+    v = vector
+    if self.metric == "cosine":
+        v = SimilarityMetric.normalize(vector)
+
+    cluster_id = self._find_nearest_centroid(v)
+    self.inverted_lists[cluster_id].append(v)
+    self.inverted_ids[cluster_id].append(id)
+```
+
+Each vector gets assigned to exactly one cluster - the one whose centroid is closest. Over time, each inverted list fills up with similar vectors.
+
+Well, with that, let's define the `__len__()` function now.
+
+```py
+def __len__(self):
+    total = 0
+    for inverted_list in self.inverted_lists:
+        total += len(inverted_list)
+    return total
+```
+
+## The Search 
+
+Here is where IVF shows its power. Instead of searching all vectors, we find the closest cluster(s) to our quert, and then search only the vectors in those clusters. (Remember the library analogy?)
+

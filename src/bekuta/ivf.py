@@ -64,3 +64,21 @@ class IVFIndex(BaseIndex):
             mean[i] /= len(vectors)
 
         return mean
+
+    def add(self, id, vector):
+        if not self.is_trained:
+            raise ValueError("CAN NOT ADD VECTORS BEFORE BEING TRAINED")
+
+        v = vector
+        if self.metric == "cosine":
+            v = SimilarityMetric.normalize(vector)
+
+        cluster_id = self._find_nearest_centroid(v)
+        self.inverted_lists[cluster_id].append(v)
+        self.inverted_ids[cluster_id].append(id)
+
+    def __len__(self):
+        total = 0
+        for inverted_list in self.inverted_lists:
+            total += len(inverted_list)
+        return total
