@@ -26,6 +26,23 @@ def add_batch(index, ids, vectors):
         add(index, id, vector)
 
 
+def delete(index, id):
+    if id not in index.ids_to_index:
+        return
+
+    pos = index.ids_to_index[id]
+    last_pos = len(index.vectors) - 1
+
+    if pos != last_pos:
+        index.vectors[pos] = index.vectors[last_pos]
+        index.ids[pos] = index.ids[last_pos]
+        index.ids_to_index[index.ids[pos]] = pos
+
+    index.vectors.pop()
+    index.ids.pop()
+    del index.ids_to_index[id]
+
+
 def search(index, query_vector, k):
     q = query_vector
     if index.metric == "cosine":
@@ -57,3 +74,4 @@ def heap_search(index, query_vector, k):
             heapq.heappushpop(heap, (s, id))
 
     return [(id, s) for s, id in sorted(heap, reverse=True)]
+

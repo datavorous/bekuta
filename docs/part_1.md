@@ -255,4 +255,57 @@ def add_batch(index, ids, vectors):
     for id, vector in zip(ids, vectors):
         add(index, id, vector)
 ```
+and we got that working like that
+
+```py
+add_batch(index, ["a", "b", "c"], [
+    [1.0, 1.0, 1.0],
+    [2.0, 2.0, 2.0],
+    [1.1, 1.1, 1.1]
+])
+```
+let's implement the deleting part
+
+```py
+def delete(index, id):
+    if id not in index.ids_to_index:
+        return
+
+    pos = index.ids_to_index[id]
+    last_pos = len(index.vectors) - 1
+
+    if pos != last_pos:
+        index.vectors[pos] = index.vectors[last_pos]
+        index.ids[pos] = index.ids[last_pos]
+        index.ids_to_index[index.ids[pos]] = pos
+
+    index.vectors.pop()
+    index.ids.pop()
+    del index.ids_to_index[id]
+```
+
+```py
+print("Before deletion:")
+for id_val, vector in zip(index.ids, index.vectors):
+    print(f"id: {id_val}, vector: {vector}")
+
+# delete the index with id "b"
+delete(index, "b")
+
+print("After deletion:")
+for id_val, vector in zip(index.ids, index.vectors):
+    print(f"id: {id_val}, vector: {vector}")
+```
+
+output:
+
+```
+Before deletion:
+id: a, vector: [1.0, 1.0, 1.0]
+id: b, vector: [2.0, 2.0, 2.0]
+id: c, vector: [1.1, 1.1, 1.1]
+After deletion:
+id: a, vector: [1.0, 1.0, 1.0]
+id: c, vector: [1.1, 1.1, 1.1]
+```
 
