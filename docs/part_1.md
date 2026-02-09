@@ -34,3 +34,19 @@ def normalize(vector):
         return vector
     return [v / mag for v in vector]
 ```
+
+now with these done, we should move to implement something to add vectors to the index.
+
+```py
+def add(index, id, vector):
+    v = vector
+    if v.index = "cosine":
+        # we are normalizing here
+        v = normalize(vector)
+
+    pos = len(index.vectors)
+    index.vectors.append(v)
+    # id is given be the position of the vec in the list
+    index.ids.append(id)
+    index.ids_to_index[id] = pos
+```
