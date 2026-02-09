@@ -309,3 +309,96 @@ id: a, vector: [1.0, 1.0, 1.0]
 id: c, vector: [1.1, 1.1, 1.1]
 ```
 
+well this looks usable as a toy 
+
+can we restructure it in any better way?
+
+right now our code is tightly coupled to FlatIndex, if we wanted to add new index types (like HNSW, IVF or LSH), we would have to rewrite a lot of code, so we need to refactor to make adding new indexes easier
+
+we would need a common interface that all index types follow, so the rest of our code dont care doesnt care which index is being used
+
+we might use an abstract class or protocol to define the interface, then go on to implement concrete index types
+
+so let's create a base class that defines what methods every index must have, then refact FlatIndex to inherit from it
+
+something like this should work for us:
+
+```py
+class BaseIndex:
+    def __init__(self, dim, metric="cosine"):
+        self.dim = dim
+        self.metric = metric
+
+    def add(self, id, vector):
+        raise NotImplementedError
+    
+    def add_batch(self, ids, vectors):
+        for i in range(len(ids)):
+            self.add(ids[i], vectors[i])
+
+    def search(self, query_vector, k):
+        raise NotImplementedError
+    
+    def delete(self, id):
+        raise NotImplementedError
+    
+    def __len__(self):
+        raise NotImplementedError
+```
+
+let's wrap around our FlatIndex around this
+
+```py
+class FlatIndex(BaseIndex):
+    def __init__(self, dim, metric="cosine"):
+        super().__init__(dim, metric)
+        self.vectors = []
+        self.ids = []
+        self.ids_to_index = {}
+
+        def add(self, id, vector):
+            v = vector
+            if self.metric == "cosine":
+                v = normalize(vector)
+
+            pos = len(self.vectors)
+            self.vectors.append(v)
+            self.ids.append(id)
+            self.ids_to_index[id] = pos
+
+        def search(self, query_vector, k):
+            q = query_vector
+            if self.metric == "cosine":
+                q = normalize(query_vector)
+
+            heap = []
+            for pos in range(len(self.vectors)):
+                id = self.ids[pos]
+                s = score(self.metric, q, self.vectors[pos])
+                if len(heap) < k:
+                    heapq.heappush(heap, (s, id))
+                else:
+                    heapq.heappushpop(heap, (s, id))
+
+            return [(id, s) for s, id in sorted(heap, reverse=True)]
+
+        def delete(self, id):
+            if id not in self.ids_to_index:
+                return
+
+            pos = self.ids_to_index[id]
+            last_pos = len(self.vectors) - 1
+
+            if pos != last_pos:
+                self.vectors[pos] = self.vectors[last_pos]
+                self.ids[pos] = self.ids[last_pos]
+                self.ids_to_index[self.ids[pos]] = pos
+
+            self.vectors.pop()
+            self.ids.pop()
+            del self.ids_to_index[id]
+            return True
+
+        def __len__(self):
+            return len(self.vectors)
+```

@@ -1,77 +1,59 @@
+import heapq
+
 from .utils import normalize
 from .kernels import score
+from .base import BaseIndex
 
 
-class FlatIndex:
+class FlatIndex(BaseIndex):
     def __init__(self, dim, metric="cosine"):
-        self.dim = dim
-        self.metric = metric
+        super().__init__(dim, metric)
         self.vectors = []
         self.ids = []
         self.ids_to_index = {}
 
+        def add(self, id, vector):
+            v = vector
+            if self.metric == "cosine":
+                v = normalize(vector)
 
-def add(index, id, vector):
-    v = vector
-    if index.metric == "cosine":
-        v = normalize(vector)
+            pos = len(self.vectors)
+            self.vectors.append(v)
+            self.ids.append(id)
+            self.ids_to_index[id] = pos
 
-    pos = len(index.vectors)
-    index.vectors.append(v)
-    index.ids.append(id)
-    index.ids_to_index[id] = pos
+        def search(self, query_vector, k):
+            q = query_vector
+            if self.metric == "cosine":
+                q = normalize(query_vector)
 
-def add_batch(index, ids, vectors):
-    for id, vector in zip(ids, vectors):
-        add(index, id, vector)
+            heap = []
+            for pos in range(len(self.vectors)):
+                id = self.ids[pos]
+                s = score(self.metric, q, self.vectors[pos])
+                if len(heap) < k:
+                    heapq.heappush(heap, (s, id))
+                else:
+                    heapq.heappushpop(heap, (s, id))
 
+            return [(id, s) for s, id in sorted(heap, reverse=True)]
 
-def delete(index, id):
-    if id not in index.ids_to_index:
-        return
+        def delete(self, id):
+            if id not in self.ids_to_index:
+                return
 
-    pos = index.ids_to_index[id]
-    last_pos = len(index.vectors) - 1
+            pos = self.ids_to_index[id]
+            last_pos = len(self.vectors) - 1
 
-    if pos != last_pos:
-        index.vectors[pos] = index.vectors[last_pos]
-        index.ids[pos] = index.ids[last_pos]
-        index.ids_to_index[index.ids[pos]] = pos
+            if pos != last_pos:
+                self.vectors[pos] = self.vectors[last_pos]
+                self.ids[pos] = self.ids[last_pos]
+                self.ids_to_index[self.ids[pos]] = pos
 
-    index.vectors.pop()
-    index.ids.pop()
-    del index.ids_to_index[id]
+            self.vectors.pop()
+            self.ids.pop()
+            del self.ids_to_index[id]
+            return True
 
-
-def search(index, query_vector, k):
-    q = query_vector
-    if index.metric == "cosine":
-        q = normalize(query_vector)
-
-    results = []
-    for pos in range(len(index.vectors)):
-        id = index.ids[pos]
-        s = score(index.metric, q, index.vectors[pos])
-        results.append((id, s))
-
-    results.sort(key=lambda x: x[1], reverse=True)
-    return results[:k]
-
-def heap_search(index, query_vector, k):
-    import heapq
-
-    q = query_vector
-    if index.metric == "cosine":
-        q = normalize(query_vector)
-
-    heap = []
-    for pos in range(len(index.vectors)):
-        id = index.ids[pos]
-        s = score(index.metric, q, index.vectors[pos])
-        if len(heap) < k:
-            heapq.heappush(heap, (s, id))
-        else:
-            heapq.heappushpop(heap, (s, id))
-
-    return [(id, s) for s, id in sorted(heap, reverse=True)]
-
+        def __len__(self):
+            return len(self.vectors)
