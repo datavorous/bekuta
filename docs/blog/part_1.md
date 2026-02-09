@@ -1,4 +1,13 @@
-# Building a Vector Search Library from Scratch
+# Building a Vector Search Library from Scratch: Part 1
+
+## Prelude 
+
+In this series, I'm building a small toy vector search library called [`bekuta`](https://github.com/datavorous/bekuta) from scratch to reason about how vector search systems work. The focus is on understanding the underlying algorithms and trade-offs by implementing them directly.
+
+Everything is written in pure Python, because clarity and algorithmic structure are the primary goals. 
+I'll start with Flat (exact) search and progressively implement IVF, SQ8, PQ, and eventually HNSW.
+
+## Let's Think
 
 Imagine that we are building a recommendation system. We have got 10M product descriptions, and a user just typed "running shoes for wide feet". How do you find the most relevant product in milliseconds?
 
