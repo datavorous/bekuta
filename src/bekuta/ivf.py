@@ -92,17 +92,27 @@ class IVFIndex(BaseIndex):
         if self.metric == "cosine":
             q = SimilarityMetric.normalize(query_vector)
 
-        cluster_id = self._find_nearest_centroid(q)
+        # cluster_id = self._find_nearest_centroid(q)
+
+        cluster_scores = []
+        for i, centroid in enumerate(self.centroids):
+            score = SimilarityMetric.score(self.metric, q, centroid)
+            cluster_scores.append((score, i))
+
+        cluster_scores.sort(reverse=True)
+        clusters_to_search = [index for i, index in cluster_scores[:self.n_probe]]
 
         heap = []
-        for pos in range(len(self.inverted_lists[cluster_id])):
-            vec = self.inverted_lists[cluster_id][pos]
-            id_val = self.inverted_ids[cluster_id][pos]
-            score = SimilarityMetric.score(self.metric, q, vec)
+        for cluster_id in clusters_to_search:
+            # we just added a new loop around it
+            for pos in range(len(self.inverted_lists[cluster_id])):
+                vec = self.inverted_lists[cluster_id][pos]
+                id_val = self.inverted_ids[cluster_id][pos]
+                score = SimilarityMetric.score(self.metric, q, vec)
 
-            if len(heap) < k:
-                heapq.heappush(heap, (score, id_val))
-            else:
-                heapq.heappushpop(heap, (score, id_val))
+                if len(heap) < k:
+                    heapq.heappush(heap, (score, id_val))
+                else:
+                    heapq.heappushpop(heap, (score, id_val))
         
         return [(id_val, s) for s, id_val in sorted(heap, reverse=True)]

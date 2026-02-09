@@ -211,3 +211,73 @@ def search(self, query_vector, k):
     
     return [(id_val, s) for s, id_val in sorted(heap, reverse=True)]    
 ```
+
+Look at what we are doing here. If we have 100 clusters and our vectors are evenly distributed, we are searching ~1% of the database. That's a 100x speedup.
+
+But hey, what if the best match is in the second closest cluster? We would miss it completely.
+
+## Searching Multiple Clusters
+
+We will introduce a parameter called `n_probe`. This is the key parameter for tuning the accuracy-speed trade off. We need to modify our `IVFIndex` class now.
+
+```py
+class IVFIndex(BaseIndex):
+    def __init__(self, dim, metric="cosine", n_lists=100):
+        super().__init__(dim, metric)
+        # .. other code ..
+        # how many clusters to search
+        self.n_probe = n_probe
+```
+
+Now we need to fix our `search()` function to use `n_probe` and search the closest clusters.
+
+```py
+def search(self, query_vector, k):
+    # .. other code ..
+
+    # cluster_id = self._find_nearest_centroid(q)
+
+    cluster_scores = []
+    for i, centroid in enumerate(self.centroids):
+        score = SimilarityMetric.score(self.metric, q, centroid)
+        cluster_scores.append((score, i))
+
+    cluster_scores.sort(reverse=True)
+    clusters_to_search = [index for i, index in cluster_scores[:self.n_probe]]
+
+    heap = []
+    
+    for cluster_id in clusters_to_search:
+        # we just added a new loop around it
+        for pos in range(len(self.inverted_lists[cluster_id])):
+            vec = self.inverted_lists[cluster_id][pos]
+            id_val = self.inverted_ids[cluster_id][pos]
+            score = SimilarityMetric.score(self.metric, q, vec)
+
+            if len(heap) < k:
+                heapq.heappush(heap, (score, id_val))
+            else:
+                heapq.heappushpop(heap, (score, id_val))
+    
+    return [(id_val, s) for s, id_val in sorted(heap, reverse=True)]  
+```
+
+Now we kind of have a dial, where if we set `n_probe=1`, we wil have maximum speed, or `n_probe=10` (or more than that) for better accuracy.
+
+With 100 clusters, `n_probe=10` means we search 10% of the database, that is still a 10x speedup, but with an okay-ish recall.
+
+## Wiring it into the Engine
+
+Be glad, that we had implemented this pattern beforehand.
+
+```py
+from .flat import FlatIndex
+
+
+class Engine:
+    @staticmethod
+    def create_index(dim, metric="cosine", index_type="flat"):
+        if index_type == "flat":
+            return FlatIndex(dim, metric)
+        raise ValueError(f"Unknown index type: {index_type}")
+```
