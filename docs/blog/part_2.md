@@ -78,3 +78,35 @@ It is like an index at the back of a book that maps topics to page numbers.
 ## Finding the Clusters
 
 This is that point, where the paths diverge. Unlike `FlatIndex`, before we can add vectors, we need to TRAIN the index to discover the cluster structure. This requires a sample of vectors representative of our data.
+
+Let's try to implement the algorithm which we conceptualised earlier.
+
+```py
+import random as r
+# .. other code ..
+
+def train(self, training_vectors):
+    # we are picking random samples as centroids
+    self.centroids = r.sample(training_vectors, self.n_lists)
+
+    # nudges, im going with 25 iterations, which is a common choice for k-means
+    for iters in range(25):
+
+        # assigning vectors to the nearest centroid
+        assignments = [[] for _ in range(self.n_lists)]
+        for vec in training_vectors:
+            nearest_index = self._find_nearest_centroid(vec)
+            assignments[nearest_index].append(vec)
+
+        # move centroids to the mean of their assigned vectors
+        for i in range(self.n_lists):
+            if assignments[i]:
+                self.centroids[i] = self._compute_centroid(assignments[i])
+
+    self.is_trained = True
+```
+
+We need to implement these two functions now: `_find_nearest_centroid()` and `_compute_centroid()`. If you had to remember one thing from this entire article, it would be the implementation of the former function stated above. That is literally the heartbeat of IVF. It will do the same thing as our search function, that is to find which cluster is closest to a vector. 
+
+```py
+```
