@@ -109,4 +109,43 @@ def train(self, training_vectors):
 We need to implement these two functions now: `_find_nearest_centroid()` and `_compute_centroid()`. If you had to remember one thing from this entire article, it would be the implementation of the former function stated above. That is literally the heartbeat of IVF. It will do the same thing as our search function, that is to find which cluster is closest to a vector. 
 
 ```py
+from .kernels import SimilarityMetric
+# .. other code ..
+
+def _find_nearest_centroid(self, vector):
+    best_score = float('-inf')
+    best_index = 0
+
+    q = vector
+
+    if self.metric == "cosine":
+        q = SimilarityMetric.normalize(vector)
+
+    for i, centroid in enumerate(self.centroids):
+        score = SimilarityMetric.score(self.metric, q, centroid)
+        if score > best_score:
+            best_score = score
+            best_index = i
+
+    return best_index
 ```
+
+I have full faith on my audience that they can decipher what is being done with the code shown above.
+
+```py
+def _compute_mean(self, vectors):
+    dim = len(vectors[0])
+    mean = [0.0] * dim
+
+    for vec in vectors:
+        for i in range(dim):
+            mean[i] += vec[i]
+
+    for i in range(dim):
+        mean[i] /= len(vectors)
+
+    return mean
+```
+
+This is pretty straightforward as well.
+

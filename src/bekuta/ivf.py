@@ -1,5 +1,8 @@
 from .base import BaseIndex
+from .kernels import SimilarityMetric
+
 import random as r
+
 
 class IVFIndex(BaseIndex):
     def __init__(self, dim, metric="cosine", n_lists=100):
@@ -31,4 +34,33 @@ class IVFIndex(BaseIndex):
                     self.centroids[i] = self._compute_centroid(assignments[i])
 
         self.is_trained = True
-        
+
+    def _find_nearest_centroid(self, vector):
+        best_score = float("-inf")
+        best_index = 0
+
+        q = vector
+
+        if self.metric == "cosine":
+            q = SimilarityMetric.normalize(vector)
+
+        for i, centroid in enumerate(self.centroids):
+            score = SimilarityMetric.score(self.metric, q, centroid)
+            if score > best_score:
+                best_score = score
+                best_index = i
+
+        return best_index
+
+    def _compute_mean(self, vectors):
+        dim = len(vectors[0])
+        mean = [0.0] * dim
+
+        for vec in vectors:
+            for i in range(dim):
+                mean[i] += vec[i]
+
+        for i in range(dim):
+            mean[i] /= len(vectors)
+
+        return mean
