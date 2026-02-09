@@ -2,7 +2,7 @@ from .base import BaseIndex
 from .kernels import SimilarityMetric
 
 import random as r
-
+import heapq
 
 class IVFIndex(BaseIndex):
     def __init__(self, dim, metric="cosine", n_lists=100):
@@ -82,3 +82,27 @@ class IVFIndex(BaseIndex):
         for inverted_list in self.inverted_lists:
             total += len(inverted_list)
         return total
+
+
+    def search(self, query_vector, k):
+        if not self.is_trained:
+            raise ValueError("MUST BE TRAINED BEFORE SEARCHING")
+
+        q = query_vector
+        if self.metric == "cosine":
+            q = SimilarityMetric.normalize(query_vector)
+
+        cluster_id = self._find_nearest_centroid(q)
+
+        heap = []
+        for pos in range(len(self.inverted_lists[cluster_id])):
+            vec = self.inverted_lists[cluster_id][pos]
+            id_val = self.inverted_ids[cluster_id][pos]
+            score = SimilarityMetric.score(self.metric, q, vec)
+
+            if len(heap) < k:
+                heapq.heappush(heap, (score, id_val))
+            else:
+                heapq.heappushpop(heap, (score, id_val))
+        
+        return [(id_val, s) for s, id_val in sorted(heap, reverse=True)]

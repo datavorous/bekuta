@@ -183,3 +183,31 @@ def __len__(self):
 
 Here is where IVF shows its power. Instead of searching all vectors, we find the closest cluster(s) to our quert, and then search only the vectors in those clusters. (Remember the library analogy?)
 
+```py
+import heapq
+from .kernels import SimilarityMetric
+# .. other code ..
+
+def search(self, query_vector, k):
+    if not self.is_trained:
+        raise ValueError("MUST BE TRAINED BEFORE SEARCHING")
+
+    q = query_vector
+    if self.metric == "cosine":
+        q = SimilarityMetric.normalize(query_vector)
+
+    cluster_id = self._find_nearest_centroid(q)
+
+    heap = []
+    for pos in range(len(self.inverted_lists[cluster_id])):
+        vec = self.inverted_lists[cluster_id][pos]
+        id_val = self.inverted_ids[cluster_id][pos]
+        score = SimilarityMetric.score(self.metric, q, vec)
+
+        if len(heap) < k:
+            heapq.heappush(heap, (score, id_val))
+        else:
+            heapq.heappushpop(heap, (score, id_val))
+    
+    return [(id_val, s) for s, id_val in sorted(heap, reverse=True)]    
+```
