@@ -21,6 +21,10 @@ def add(index, id, vector):
     index.ids.append(id)
     index.ids_to_index[id] = pos
 
+def add_batch(index, ids, vectors):
+    for id, vector in zip(ids, vectors):
+        add(index, id, vector)
+
 
 def search(index, query_vector, k):
     q = query_vector

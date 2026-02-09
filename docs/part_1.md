@@ -243,3 +243,16 @@ id: vec68, score: 1.0
 damn
 
 instead of sorting N items O(N log N), we maintain a heap of size k O(N log K), which is much faster when k << N
+
+what can we do next to make this a usable artifact?
+
+uh maybe adding a function to delete vectors, and having batch implementation?
+
+batch insertion is easy tbf:
+
+```py
+def add_batch(index, ids, vectors):
+    for id, vector in zip(ids, vectors):
+        add(index, id, vector)
+```
+

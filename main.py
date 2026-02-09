@@ -1,10 +1,14 @@
-from src.flat import FlatIndex, add, search, heap_search
+from src.flat import FlatIndex, add, search, heap_search, add_batch
 import time
 
 index = FlatIndex(dim=3, metric="cosine")
 
-for i in range(10_000_000):
-    add(index, f"vec{i}", [i % 10, (i // 10) % 10, (i // 100) % 10])
+batch_size = 100_000
+for i in range(0, 10_000_000, batch_size):
+    ids = [f"vec{j}" for j in range(i, min(i + batch_size, 10_000_000))]
+    vectors = [[j % 10, (j // 10) % 10, (j // 100) % 10] for j in range(i, min(i + batch_size, 10_000_000))]
+
+add_batch(index, ids, vectors)
 
 query = [0.8, 0.6, 0]
 
