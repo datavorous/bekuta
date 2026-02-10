@@ -42,5 +42,3 @@ ivf_results = search_index(ivf, query)
 
 print("\nFlat results:", flat_results[:3])
 print("IVF results:", ivf_results[:3])
-
-

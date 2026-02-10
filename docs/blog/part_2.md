@@ -286,30 +286,108 @@ class Engine:
         raise ValueError(f"Unknown index type: {index_type}")
 ```
 
-## Benchmarking!
-2. Baseline: FLAT Index (Brute Force)
+## Benchmarking: Does IVF actually deliver?
 
-Metric  Value
-Recall@10       100.00%
-Mean Latency    36.624 ms
-p99 Latency     37.174 ms
-Throughput      27.3 QPS
-Build Time      15 ms
-Memory Usage    39.2 MB
+Time to see if all this theory translates into real performance gains. I ran benchmarks on relatively small datasets(5k and 10k vectors, 8 dimensions). These are intentionally modest, but are large enough to expose the core trade offs.
 
-Candidate: IVF Index Performance
+### Baseline: FlatIndex
 
-Training + Addition: 85.9s | n_lists=100 | vectors=50000
-nprobe  Recall %        Mean (ms)       p99 (ms)        Throughput (QPS)        Speedup
-1       64.45%  0.662   1.690   1510.4          55.32x
-2       80.30%  1.228   1.838   814.3           29.82x
-4       94.10%  2.355   3.060   424.6           15.55x
-8       99.30%  4.723   5.587   211.7           7.75x
-16      99.95%  9.227   9.933   108.4           3.97x
-Training + Addition: 226.5s | n_lists=256 | vectors=50000
-nprobe  Recall %        Mean (ms)       p99 (ms)        Throughput (QPS)        Speedup
-1       57.25%  0.449   0.828   2228.0          81.60x
-2       73.25%  0.676   1.410   1479.9          54.20x
-4       88.65%  1.128   1.645   886.8           32.48x
-8       96.20%  2.027   3.056   493.4           18.07x
-16      99.40%  3.878   4.458   257.8           9.44x
+First, we define the ground truth with brute force FlatIndex scan!
+
+
+For 5000 vectors:
+
+```
+1. Mean Latency: ~3.65ms per query
+2. Throughput: ~274 queries per second 
+3. Recall: 100% (obviously)
+```
+
+For 10,000 vectors:
+
+```
+1. Mean Latency: ~7.45ms per query
+2. Throughput: ~134 queries per second 
+3. Recall: 100% (obviously)
+```
+
+This is our reference point. Latency scales linearly with dataset size, which was expected. For a single user clicking around that would feel almost instant, BUT if we try to handle 100 concurrent users, we would struggle to serve.
+
+### IVF: The First Configuration 
+
+#### n_lists=50 (5000 vectors)
+
+Training builds 50 k-means centroids. After that we vary the `n_probe`:
+
+```
+n_probe=1  | recall 55.0% | latency 0.128 ms | 7806 QPS | 28.5x speedup
+n_probe=2  | recall 72.0% | latency 0.211 ms | 4728 QPS | 17.3x speedup
+n_probe=4  | recall 87.5% | latency 0.357 ms | 2802 QPS | 10.2x speedup
+n_probe=8  | recall 98.5% | latency 0.646 ms | 1549 QPS |  5.7x speedup
+n_probe=16 | recall 100%  | latency 1.316 ms |  760 QPS |  2.8x speedup
+```
+
+Look at the progression. 
+
+At `n_probe=1`, IVF is extremely aggressive: nearly 30x faster, but recall collapses to 55%. That's rarely acceptable.
+
+At `n_probe=4`, we hit a practical balance: 87.5% recall with a 10x speedup, cutting latency from 3.65 ms to 0.36 ms.
+
+By `n_probe=8`, recall is effectively exact (98.5%) while still being almost 6x faster than brute force!
+
+#### n_lists=100 (10,000 vectors)
+
+Now we double both the dataset size and cluster count.
+
+```
+n_probe=1  | recall 67.5% | latency 0.168 ms | 5952 QPS | 44.3x speedup
+n_probe=2  | recall 82.5% | latency 0.249 ms | 4015 QPS | 29.9x speedup
+n_probe=4  | recall 92.0% | latency 0.407 ms | 2455 QPS | 18.3x speedup
+n_probe=8  | recall 99.0% | latency 0.729 ms | 1371 QPS | 10.2x speedup
+n_probe=16 | recall 100%  | latency 1.368 ms |  731 QPS |  5.4x speedup
+```
+
+Increasing `n_lists` improves both recall at low probes and overall speedups.
+
+At `n_probe=4`, we get 92% recall with an 18x speedup. That is a strong default configuration with sub-millisecond latency and (okayish) high accuracy.
+
+At `n_probe=8`, recall reaches 99% while still being 10x faster than brute force.
+
+NOTE: Training is a one time cost, and even modest query volumes amortize training very quickly. After that point, every query is cheaper and faster.
+
+## What the Numbers Tell Us
+
+The numbers make the trade-off obvious and ... really exciting! On the 10k dataset, `n_probe=4` already hits ~93% recall while cutting latency from ~7.4 ms to ~0.4 ms and boosting throughput from ~136 QPS to ~2,400 QPS, which is an 18x (!!) speedup for only a small loss in accuracy. If we push to `n_probe=8` then recall jumps to ~99% while still staying about 11x faster than brute force. 
+
+## What We're NOT Showing
+
+These benchmarks use cosine similarity on randomly distributed vectors. Real-world data often clusters more naturally. Product embeddings, document vectors, image features tend to have structure. In those cases, IVF performs even better because the clusters are more coherent.
+
+Conversely, if the vectors are truly uniformly distributed (like random noise), IVF struggles. The clusters don't capture meaningful patterns, and recall suffers.
+You can try it on your own data to see how IVF performs.
+
+## The Memory Elephant in the Room
+
+So far, we have only talked about speed. Memory is the other half of the equation. IVF changes how we search, not what we store. That means IVF does not reduce memory usage by itself.
+
+In a realistic system, vectors are stored as dense `float32` arrays. The memory cost is easy to compute (`memory per vector = dimensions * 4 bytes`), just take a look:
+
+8D vector = 32 bytes  
+128D vector = 512 bytes  
+
+At scale, this will grow _really fast_.
+100 million vectors at 128 dimensions will require around 48GB!
+
+That is before accounting for metadata, indexes, or replicas. No matter how clever the indexing scheme is, storing raw embeddings becomes very expensive at large scale.
+
+Solving this requires would changing the representation itself. Instead of storing every vector exactly, we need to somewhat compress them while preserving approximate distances.
+
+And...this is where quantization enters the picture! 
+The topic of Part 3.
+
+## What's Next?
+
+We are going to address memory. 
+In Part 3 of this series, we will try to implement Product Quantization. 
+
+The code is on Github, Benchmark scripts live inside the `benchmarks/` folder. Clone it and run experiments yourself!
