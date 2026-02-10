@@ -5,9 +5,10 @@ import random as r
 import heapq
 
 class IVFIndex(BaseIndex):
-    def __init__(self, dim, metric="cosine", n_lists=100):
+    def __init__(self, dim, metric="cosine", n_lists=100, n_probe=1):
         super().__init__(dim, metric)
         self.n_lists = n_lists
+        self.n_probe = n_probe
         self.centroids = []
         self.inverted_lists = []
         self.inverted_ids = []
@@ -16,7 +17,11 @@ class IVFIndex(BaseIndex):
     def train(self, training_vectors):
 
         # we are picking random samples as centroids
+        if len(training_vectors) < self.n_lists:
+            raise ValueError("training_vectors must be >= n_lists")
         self.centroids = r.sample(training_vectors, self.n_lists)
+        self.inverted_lists = [[] for _ in range(self.n_lists)]
+        self.inverted_ids = [[] for _ in range(self.n_lists)]
 
         # nudges, im going with 25 iterations, which is a common choice for k-means
         for iters in range(25):
@@ -31,7 +36,7 @@ class IVFIndex(BaseIndex):
             # move centroids to the mean of their assigned vectors
             for i in range(self.n_lists):
                 if assignments[i]:
-                    self.centroids[i] = self._compute_centroid(assignments[i])
+                    self.centroids[i] = self._compute_mean(assignments[i])
 
         self.is_trained = True
 

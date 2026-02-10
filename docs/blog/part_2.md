@@ -285,3 +285,31 @@ class Engine:
             return IVFIndex(dim, metric, n_lists, n_probe)
         raise ValueError(f"Unknown index type: {index_type}")
 ```
+
+## Benchmarking!
+2. Baseline: FLAT Index (Brute Force)
+
+Metric  Value
+Recall@10       100.00%
+Mean Latency    36.624 ms
+p99 Latency     37.174 ms
+Throughput      27.3 QPS
+Build Time      15 ms
+Memory Usage    39.2 MB
+
+Candidate: IVF Index Performance
+
+Training + Addition: 85.9s | n_lists=100 | vectors=50000
+nprobe  Recall %        Mean (ms)       p99 (ms)        Throughput (QPS)        Speedup
+1       64.45%  0.662   1.690   1510.4          55.32x
+2       80.30%  1.228   1.838   814.3           29.82x
+4       94.10%  2.355   3.060   424.6           15.55x
+8       99.30%  4.723   5.587   211.7           7.75x
+16      99.95%  9.227   9.933   108.4           3.97x
+Training + Addition: 226.5s | n_lists=256 | vectors=50000
+nprobe  Recall %        Mean (ms)       p99 (ms)        Throughput (QPS)        Speedup
+1       57.25%  0.449   0.828   2228.0          81.60x
+2       73.25%  0.676   1.410   1479.9          54.20x
+4       88.65%  1.128   1.645   886.8           32.48x
+8       96.20%  2.027   3.056   493.4           18.07x
+16      99.40%  3.878   4.458   257.8           9.44x

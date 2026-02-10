@@ -1,29 +1,46 @@
 from bekuta import Engine
 from profiling import profile
+import random
+
+
+def make_dataset(count, dim):
+    rng = random.Random(42)
+    ids = [f"vec{i}" for i in range(count)]
+    vectors = [[rng.random() for _ in range(dim)] for _ in range(count)]
+    return ids, vectors
 
 
 @profile
-def create_and_populate_index():
-    engine = Engine.create_index(dim=3, metric="l2", index_type="flat")
-    engine.add_batch(
-        ["a", "b", "c"],
-        [[1.0, 1.0, 1.0], [2.0, 2.0, 2.0], [1.1, 1.1, 1.1]],
-    )
-    return engine
+def build_flat(ids, vectors):
+    index = Engine.create_index(dim=8, metric="l2", index_type="flat")
+    index.add_batch(ids, vectors)
+    return index
 
 
 @profile
-def run_search(engine):
-    query = [0.8, 0.6, 0]
-    results = engine.search(query, k=2)
-    return results
+def build_ivf(ids, vectors):
+    index = Engine.create_index(dim=8, metric="l2", index_type="ivf", n_lists=50, n_probe=4)
+    index.train(vectors)
+    for id_val, vec in zip(ids, vectors):
+        index.add(id_val, vec)
+    return index
 
 
-engine = create_and_populate_index()
+@profile
+def search_index(index, query):
+    return index.search(query, k=5)
 
-query = [0.8, 0.6, 0]
 
-results = run_search(engine)
+ids, vectors = make_dataset(count=5000, dim=8)
 
-for id_val, score_val in results:
-    print(f"id: {id_val}, score: {score_val}")
+flat = build_flat(ids, vectors)
+ivf = build_ivf(ids, vectors)
+
+query = vectors[0]
+flat_results = search_index(flat, query)
+ivf_results = search_index(ivf, query)
+
+print("\nFlat results:", flat_results[:3])
+print("IVF results:", ivf_results[:3])
+
+

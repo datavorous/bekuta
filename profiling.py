@@ -11,5 +11,4 @@ def profile(func):
         elapsed_ms = (end - start) * 1000
         print(f"[PROFILE] {func.__name__} took {elapsed_ms:.3f}ms")
         return result
-
     return wrapper
